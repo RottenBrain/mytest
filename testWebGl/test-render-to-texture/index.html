@@ -1,0 +1,174 @@
+<html>
+<head>
+    <style>
+        body {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        canvas {
+            position: relative;
+            border: none;
+            width: 100%;
+            height: 100%;
+        }
+        .image-cache {
+            display: none;
+        }
+    </style>
+    <script>
+        function start(){
+            var canvas = document.getElementById("glcanvas")
+            var gl = initGL(canvas);
+            if (!gl) return;
+
+            var resize = function(){
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            };
+            resize();
+            window.addEventListener("resize", resize);
+
+            var shaders = {
+                normal: createProgram(gl, getShader(gl, "shader-vs"), getShader(gl, "shader-fs"))
+            };
+            clearShaderCache(gl);
+            shaders.normal.use();
+
+            var vbo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1.0, 1.0,
+                1.0, 1.0,
+                -1.0, -1.0,
+                1.0, 1.0,
+                -1.0, -1.0,
+                1.0, -1.0
+            ]), gl.STATIC_DRAW);
+
+            gl.enableVertexAttribArray(shaders.normal.aPointPosition);
+            gl.vertexAttribPointer(shaders.normal.aPointPosition, 2, gl.FLOAT, false, 0, 0);
+
+            gl.uniform3f(shaders.normal.uColor, 1.0, 1.0, 0.0);
+
+            console.log("start webgl rendering...");
+            render(gl);
+        }
+
+        function initGL(canvas){
+            var gl = null;
+            try {
+                gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            }
+            catch(e) {
+                alert("Error getting webgl context.");
+                console.log(e);
+            }
+            return gl;
+        }
+
+        (function(){
+            var shaders = {};
+
+            window.getShader = function(gl, elementId){
+                if (elementId in shaders){
+                    return shaders[elementId];
+                }
+
+                var el = document.getElementById(elementId);
+                if (!el) {
+                    throw "DOM element #"+elementId+" not found!";
+                }
+                var type;
+                switch(el.type){
+                    case "x-shader/x-vertex":
+                    type = gl.VERTEX_SHADER;
+                    break
+                    case "x-shader/x-fragment":
+                    type = gl.FRAGMENT_SHADER;
+                    break;
+                    default: throw "DOM element #"+elementId+" has unknown type: " + el.type+"!";
+                }
+                var shader = gl.createShader(type);
+                gl.shaderSource(shader, el.textContent);
+                gl.compileShader(shader);
+
+                var uniforms = el.textContent.match(/uniform .*;/g),
+                    attributes = el.textContent.match(/attribute .*;/g);
+                    
+                if (uniforms) {
+                    uniforms = uniforms.map(function(uniform){ return uniform.match(/ [\w\d]*;/)[0].slice(1, -1)});
+                } else { uniforms = []; }
+
+                if (attributes) {
+                    attributes = attributes.map(function(attribute){ return attribute.match(/ [\w\d]*;/)[0].slice(1, -1)});
+                } else { attributes = []; }
+
+                var shaderOb = {glShader: shader, uniforms: uniforms, attributes: attributes};
+
+                shaders[elementId] = shaderOb;
+                return shaderOb;
+            };
+
+            window.createProgram = function(gl, vshader, fshader){
+                var progOb = {glShaderProgram: gl.createProgram()};
+                gl.attachShader(progOb.glShaderProgram, vshader.glShader);
+                gl.attachShader(progOb.glShaderProgram, fshader.glShader);
+                gl.linkProgram(progOb.glShaderProgram);
+                progOb.use = function(){gl.useProgram(this.glShaderProgram);};
+                vshader.uniforms.concat(fshader.uniforms).forEach(function(name){
+                    progOb[name] = gl.getUniformLocation(progOb.glShaderProgram, name);
+                });
+                vshader.attributes.concat(fshader.attributes).forEach(function(name){
+                    progOb[name] = gl.getAttribLocation(progOb.glShaderProgram, name);
+                });
+
+                return progOb;
+            };
+
+            window.clearShaderCache = function(gl){
+                Object.keys(shaders).forEach(function(id){gl.deleteShader(shaders[id].glShader);});
+                shaders = {};
+            }
+
+        })();
+
+        function render(gl){
+            requestAnimationFrame(function(){render(gl);});
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+    </script>
+
+    <script id = "shader-fs" type = "x-shader/x-fragment">
+        precision highp float;
+        uniform vec3 uColor;
+
+        void main(){
+            gl_FragColor = vec4(uColor, 1.0);
+        }
+    </script>
+
+    <script id = "shader-vs" type = "x-shader/x-vertex">
+        attribute vec3 aPointPosition;
+
+        void main(){
+            gl_Position = vec4(aPointPosition, 1.0);
+        }
+    </script>
+</head>
+<body onload = "start()">
+    <canvas id="glcanvas">
+        Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+    </canvas>
+    <div class="image-cache">
+        <img id = "testpic" src = "test.jpg">
+    </div>
+</body>
+</html>

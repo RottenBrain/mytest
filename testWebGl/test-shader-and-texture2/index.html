@@ -1,0 +1,175 @@
+<html>
+<head>
+    <style>
+        body {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        canvas {
+            position: relative;
+            border: none;
+            width: 100%;
+            height: 100%;
+        }
+        .image-cache {
+            display: none;
+        }
+    </style>
+    <script>
+
+        var canvas, gl, renderImage, shaderProg, startTime, texture,
+            pointPositionLocation, texturePositionLocation, textureLocation, texturePixelLocation,
+            colorLocation, resolutionLocation, timeLocation;
+
+        var vertex = [
+                -1.0,  1.0, 0.0, 0.0,
+                 1.0,  1.0, 1.0, 0.0,
+                -1.0, -1.0, 0.0, 1.0,
+                 1.0,  1.0, 1.0, 0.0,
+                -1.0, -1.0, 0.0, 1.0,
+                 1.0, -1.0, 1.0, 1.0
+            ];
+
+        function start() {
+            renderImage = document.getElementById("testpic");
+            console.log(renderImage);
+            canvas = document.getElementById("glcanvas");
+            initGL();
+            if (!gl) return;
+
+            resize();
+            window.addEventListener("resize", resize);
+
+            texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, renderImage);
+            console.log("img complite = " + renderImage.complite);
+            shaderProg = gl.createProgram();
+            var vertexShader = compileShader(document.getElementById("shader-vs").textContent, gl.VERTEX_SHADER),
+                fragmentShader = compileShader(document.getElementById("shader-fs").textContent, gl.FRAGMENT_SHADER);
+
+            gl.attachShader(shaderProg, vertexShader);
+            gl.attachShader(shaderProg, fragmentShader);
+            gl.linkProgram(shaderProg);
+
+            gl.useProgram(shaderProg);
+
+            gl.deleteShader(vertexShader);
+            gl.deleteShader(fragmentShader);
+
+            pointPositionLocation = gl.getAttribLocation(shaderProg, "aPointPosition");
+            texturePositionLocation = gl.getAttribLocation(shaderProg, "aTexturePosition");
+            textureLocation = gl.getUniformLocation(shaderProg, "uTexture");
+            texturePixelLocation = gl.getUniformLocation(shaderProg, "uTexturePixel");
+            colorLocation = gl.getUniformLocation(shaderProg, "uColor");
+            resolutionLocation = gl.getUniformLocation(shaderProg, "uResolution");
+            timeLocation = gl.getUniformLocation(shaderProg, "uTime");
+
+
+            var vbo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertex), gl.STATIC_DRAW);
+
+            gl.enableVertexAttribArray(pointPositionLocation);
+            gl.vertexAttribPointer(pointPositionLocation, 2, gl.FLOAT, false, 16, 0);
+
+            gl.enableVertexAttribArray(texturePositionLocation);
+            gl.vertexAttribPointer(texturePositionLocation, 2, gl.FLOAT, false, 16, 8);
+
+            console.log("start webgl rendering...");
+            startTime = new Date();
+
+            render();
+        }
+
+        function initGL() {
+            try {
+                gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            }
+            catch(e) {
+                alert("Error getting gl context.");
+                console.log(e);
+            }
+        }
+
+        function resize(){
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+
+        function compileShader(code, type){
+            var shader = gl.createShader(type);
+            gl.shaderSource(shader, code);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        function render(){
+            requestAnimationFrame(render);
+
+            gl.uniform3f(colorLocation, 1.0, 0.0, 0.0);
+            gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+            gl.uniform1f(timeLocation, (Date.now() - startTime) / 1000);
+            gl.uniform2f(texturePixelLocation, 1 / renderImage.width, 1 / renderImage.height);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+    </script>
+
+    <script id = "shader-fs" type = "x-shader/x-fragment">
+        precision highp float;
+        uniform vec3 uColor;
+        uniform vec2 uResolution;
+        uniform float uTime;
+        uniform sampler2D uTexture;
+        uniform vec2 uTexturePixel;
+        varying vec2 vTexCoord;
+
+        float PI = 3.14159265358979;
+
+        vec4 getc(float x,float y){
+            return texture2D(uTexture, vTexCoord + vec2(x,y) * uTexturePixel);
+        }
+
+        vec4 getc4(float k){
+            return (getc(k, 0.0) + getc(-k, 0.0) + getc(0.0, k) + getc(0.0, -k)) / 4.;
+        }
+
+        void main(){
+            vec2 pos = gl_FragCoord.xy / uResolution - vec2(0.5, 0.5);
+            pos.x *= uResolution.x / uResolution.y;
+            float s = 16.0 * (sin(uTime / 2.) / 2. + .5);
+            gl_FragColor = (texture2D(uTexture, vTexCoord) + getc4(s/4.) + getc4(s/2.) + getc4(s/4.*3.) + getc4(s)) / 5.0;
+        }
+    </script>
+
+    <script id = "shader-vs" type = "x-shader/x-vertex">
+        attribute vec3 aPointPosition;
+        attribute vec2 aTexturePosition;
+        varying vec2 vTexCoord;
+        void main(){
+            gl_Position = vec4(aPointPosition, 1.0);
+            vTexCoord = aTexturePosition;
+        }
+    </script>
+</head>
+<body onload = "start()">
+    <canvas id="glcanvas">
+        Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+    </canvas>
+    <div class="image-cache">
+        <img id = "testpic" src = "test.jpg">
+    </div>
+</body>
+</html>

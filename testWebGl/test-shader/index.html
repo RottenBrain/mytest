@@ -1,0 +1,131 @@
+<html>
+<head>
+    <style>
+        body {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        canvas {
+            position: relative;
+            border: none;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <script>
+
+        var canvas, gl, shaderProg, startTime,
+            pointPositionLocation, colorLocation, resolutionLocation, timeLocation;
+
+        var vertex = [
+                -1.0, -1.0,
+                1.0, -1.0,
+                -1.0, 1.0,
+                1.0, -1.0,
+                -1.0, 1.0,
+                1.0, 1.0
+            ];
+
+        function start() {
+            canvas = document.getElementById("glcanvas")
+            initGL();
+            if (!gl) return;
+
+            resize();
+            window.addEventListener("resize", resize);
+
+            shaderProg = gl.createProgram();
+            var vertexShader = compileShader(document.getElementById("shader-vs").textContent, gl.VERTEX_SHADER),
+                fragmentShader = compileShader(document.getElementById("shader-fs").textContent, gl.FRAGMENT_SHADER);
+
+            gl.attachShader(shaderProg, vertexShader);
+            gl.attachShader(shaderProg, fragmentShader);
+            gl.linkProgram(shaderProg);
+
+            gl.useProgram(shaderProg);
+
+            gl.deleteShader(vertexShader);
+            gl.deleteShader(fragmentShader);
+
+            pointPositionLocation = gl.getAttribLocation(shaderProg, "aPointPosition");
+            colorLocation = gl.getUniformLocation(shaderProg, "uColor");
+            resolutionLocation = gl.getUniformLocation(shaderProg, "uResolution");
+            timeLocation = gl.getUniformLocation(shaderProg, "uTime");
+
+            var vbo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertex), gl.STATIC_DRAW);
+
+            gl.enableVertexAttribArray(pointPositionLocation);
+            gl.vertexAttribPointer(pointPositionLocation, 2, gl.FLOAT, false, 0, 0);
+            console.log("start webgl rendering...");
+            startTime = new Date();
+
+            render();
+        }
+
+        function initGL() {
+            try {
+                gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            }
+            catch(e) {
+                alert("Error getting gl context.");
+                console.log(e);
+            }
+        }
+
+        function resize(){
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+
+        function compileShader(code, type){
+            var shader = gl.createShader(type);
+            gl.shaderSource(shader, code);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        function render(){
+            requestAnimationFrame(render);
+            gl.uniform3f(colorLocation, 0.0, 0.0, 1.0);
+            gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+            gl.uniform1f(timeLocation, (Date.now() - startTime) / 1000);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+    </script>
+
+    <script id = "shader-fs" type = "x-shader/x-fragment">
+        precision highp float;
+        uniform vec3 uColor;
+        uniform vec2 uResolution;
+        uniform float uTime;
+        float PI = 3.14159265358979;
+        void main(){
+            vec2 pos = gl_FragCoord.xy / uResolution - vec2(0.5, 0.5);
+            pos.x *= uResolution.x / uResolution.y;
+            float k = cos(atan(pos.x, pos.y) - cos(uTime) + sin(uTime) * PI) / 2. + .5;
+            gl_FragColor = vec4(uColor * k, 1.0);
+        }
+    </script>
+
+    <script id = "shader-vs" type = "x-shader/x-vertex">
+        attribute vec3 aPointPosition;
+        void main(){
+            gl_Position = vec4(aPointPosition * vec3(1.0, -1.0, 1.0), 1.0);
+        }
+    </script>
+</head>
+<body onload = "start()">
+    <canvas id="glcanvas">
+        Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+    </canvas>
+</body>
+</html>
